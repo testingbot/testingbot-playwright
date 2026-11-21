@@ -1,0 +1,78 @@
+{
+  "name": "@testingbot/playwright",
+  "version": "0.1.0",
+  "description": "Run Playwright Test on TestingBot: connect URLs, config wrapper, per-test session names and pass/fail status, and TestingBot Tunnel setup.",
+  "keywords": [
+    "testingbot",
+    "playwright",
+    "playwright-test",
+    "cross-browser",
+    "e2e",
+    "tunnel",
+    "cloud"
+  ],
+  "homepage": "https://github.com/testingbot/testingbot-playwright#readme",
+  "bugs": {
+    "url": "https://github.com/testingbot/testingbot-playwright/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/testingbot/testingbot-playwright.git"
+  },
+  "license": "MIT",
+  "author": "TestingBot <info@testingbot.com> (https://testingbot.com)",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./reporter": {
+      "types": "./dist/reporter.d.ts",
+      "default": "./dist/reporter.js"
+    },
+    "./global-setup": {
+      "types": "./dist/global-setup.d.ts",
+      "default": "./dist/global-setup.js"
+    },
+    "./global-teardown": {
+      "types": "./dist/global-teardown.d.ts",
+      "default": "./dist/global-teardown.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "!dist/**/*.map",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json --noEmit",
+    "test": "vitest run",
+    "prepack": "npm run build"
+  },
+  "peerDependencies": {
+    "@playwright/test": ">=1.49.0"
+  },
+  "dependencies": {
+    "testingbot-api": "^1.2.0",
+    "testingbot-tunnel-launcher": "^1.2.0"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.1",
+    "@types/node": "^20.19.43",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.7"
+  },
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

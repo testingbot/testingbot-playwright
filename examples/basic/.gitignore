@@ -1,0 +1,5 @@
+node_modules/
+test-results/
+playwright-report/
+testingbot-sessions.json
+package-lock.json
