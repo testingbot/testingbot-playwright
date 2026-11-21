@@ -34,7 +34,13 @@ jobs:
     if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository
     needs: test
     runs-on: ubuntu-latest
+    env:
+      TESTINGBOT_KEY: ${{ secrets.TESTINGBOT_KEY }}
+      TESTINGBOT_SECRET: ${{ secrets.TESTINGBOT_SECRET }}
     steps:
+      - name: Check for TestingBot credentials
+        if: env.TESTINGBOT_KEY == '' || env.TESTINGBOT_SECRET == ''
+        run: echo "::notice::TESTINGBOT_KEY/TESTINGBOT_SECRET secrets are not set, skipping the live run"
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
@@ -48,10 +54,9 @@ jobs:
       - name: Pack the package
         run: npm pack
       - name: Run the example on TestingBot
+        if: env.TESTINGBOT_KEY != '' && env.TESTINGBOT_SECRET != ''
         working-directory: examples/basic
         env:
-          TESTINGBOT_KEY: ${{ secrets.TESTINGBOT_KEY }}
-          TESTINGBOT_SECRET: ${{ secrets.TESTINGBOT_SECRET }}
           TESTINGBOT_BUILD: github-${{ github.run_id }}
         run: |
           npm install
