@@ -7,7 +7,7 @@ Run [Playwright Test](https://playwright.dev/docs/intro) on [TestingBot](https:/
 - `tunnel: true` starts a [TestingBot Tunnel](https://testingbot.com/support/tunnel) before the run and stops it afterwards, so the remote browsers can open `localhost` and other internal sites.
 - `getConnectUrl()` builds the WebSocket URL for `browserType.connect()` when you use Playwright without the test runner.
 
-Requires Node.js 18 or later and `@playwright/test` 1.49 or later.
+Requires Node.js 20 or later and `@playwright/test` 1.49 or later.
 
 ## Install
 
