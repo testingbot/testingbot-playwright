@@ -92,7 +92,7 @@ describe('withTestingBot', () => {
     expect(id).toMatch(/^playwright-/)
     expect(e.TESTINGBOT_PLAYWRIGHT_TUNNEL_IDENTIFIER).toBe(id)
     expect(config.globalSetup).toEqual([path.join(__dirname, '..', 'src', 'global-setup.js'), './my-setup.ts'])
-    expect((config.metadata as any).testingbot.tunnel).toEqual({ verbose: true, noBump: true, tunnelIdentifier: id })
+    expect((config.metadata as any).testingbot.tunnel).toEqual({ verbose: true, tunnelIdentifier: id })
     expect(decodeCapabilities(use(config.projects![0]).connectOptions.wsEndpoint)['tb:options'].tunnelIdentifier).toBe(id)
     // Same identifier when the config is loaded again in a worker.
     expect(use(withTestingBot({}, { env: e, tunnel: true }).projects![0]).testingbot.tunnelIdentifier).toBe(id)
@@ -105,9 +105,10 @@ describe('withTestingBot', () => {
     expect((config.metadata as any).testingbot.tunnel).toBe(false)
   })
 
-  it('keeps noBump when set explicitly', () => {
-    const config = withTestingBot({}, { env: env(), tunnel: { noBump: false } })
-    expect((config.metadata as any).testingbot.tunnel.noBump).toBe(false)
+  it('leaves SSL bumping to the tunnel unless noBump is set', () => {
+    expect((withTestingBot({}, { env: env(), tunnel: true }).metadata as any).testingbot.tunnel).not.toHaveProperty('noBump')
+    const config = withTestingBot({}, { env: env(), tunnel: { noBump: true } })
+    expect((config.metadata as any).testingbot.tunnel.noBump).toBe(true)
   })
 
   it('adds the reporter after the configured reporters', () => {

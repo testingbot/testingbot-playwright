@@ -143,7 +143,7 @@ tunnel: { tunnelIdentifier: process.env.TB_TUNNEL_ID, start: false }
 
 The tunnel needs Java (17 for tunnel 5.0, 11 for older versions).
 
-**HTTPS through the tunnel.** By default TestingBot Tunnel decrypts HTTPS (SSL bumping) with a TestingBot certificate. The Playwright browsers on TestingBot do not trust that certificate, so `https://` sites fail with `ERR_CERT_AUTHORITY_INVALID`. This package therefore starts the tunnel with `noBump: true` unless you set `noBump` yourself. If you need bumping (for example for a site with a self-signed certificate), pass `noBump: false` and set `ignoreHTTPSErrors: true` in `use`.
+**HTTPS through the tunnel.** TestingBot Tunnel decrypts HTTPS (SSL bumping) with a TestingBot certificate, and the Playwright browsers on TestingBot trust that certificate in tunnel sessions. Firefox only does so with Playwright 1.53 or later; on older versions pass `noBump: true` to forward HTTPS untouched.
 
 You can also use the setup on its own:
 

@@ -110,9 +110,6 @@ export function withTestingBot<T = {}, W = {}>(config: PlaywrightTestConfig<T, W
   let tunnelMetadata: TestingBotMetadata['tunnel'] = false
   if (options.tunnel) {
     const { start = true, ...tunnelOptions } = options.tunnel === true ? {} : options.tunnel
-    // Playwright browsers do not trust the tunnel's SSL-bumping CA, so HTTPS sites would fail
-    // with ERR_CERT_AUTHORITY_INVALID. Forward HTTPS untouched unless asked otherwise.
-    if (tunnelOptions.noBump === undefined) tunnelOptions.noBump = true
     tunnelIdentifier = (tunnelOptions.tunnelIdentifier as string | undefined) ?? stable(env, TUNNEL_IDENTIFIER_ENV, () => generateTunnelIdentifier())
     if (start) tunnelMetadata = { ...tunnelOptions, tunnelIdentifier }
   }
