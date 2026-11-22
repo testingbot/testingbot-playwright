@@ -106,16 +106,17 @@ export function buildCapabilities(options: ConnectUrlOptions = {}, includeCreden
 }
 
 /**
- * Returns the WebSocket URL to pass to `browserType.connect()` or to
- * `use.connectOptions.wsEndpoint` in `playwright.config`.
+ * Returns the WebSocket URL to pass to `browserType.connect()`. It contains your credentials:
+ * do not put it in `playwright.config` (`use.connectOptions`), where Playwright copies it into
+ * traces and reports. `withTestingBot()` and the `test` of this package handle that for you.
  *
  * ```ts
  * const browser = await chromium.connect(getConnectUrl({ browserName: 'chrome', platform: 'WIN11', name: 'My test' }))
  * ```
  */
-export function getConnectUrl(options: ConnectUrlOptions = {}): string {
+export function getConnectUrl(options: ConnectUrlOptions = {}, includeCredentials = true): string {
   const endpoint = options.endpoint ?? options.env?.TESTINGBOT_PLAYWRIGHT_ENDPOINT ?? process.env.TESTINGBOT_PLAYWRIGHT_ENDPOINT ?? DEFAULT_ENDPOINT
-  const capabilities = buildCapabilities(options, true)
+  const capabilities = buildCapabilities(options, includeCredentials)
   const separator = endpoint.includes('?') ? '&' : '?'
   return `${endpoint}${separator}capabilities=${encodeURIComponent(JSON.stringify(capabilities))}`
 }

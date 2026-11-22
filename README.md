@@ -77,7 +77,7 @@ TestingBot sessions:
 - **Opting out.** A project with `use: { testingbot: false }` is left alone and runs locally. You can also pin a project to a browser with `use: { testingbot: { browserName: 'chrome', browserVersion: '120', platform: 'WIN10' } }`.
 - **Build.** All sessions of a run are grouped in one build: `TESTINGBOT_BUILD` if set, otherwise a generated `playwright <date>` name. Pass `build: 'my build'` or `build: false`.
 - **Reporter.** The TestingBot reporter is added after your reporters. Pass `reporter: { outputFile: 'testingbot.json' }` to also write the sessions as JSON (useful in CI), or `reporter: false` to leave it out.
-- **`connectOptions`.** Each project also gets `use.connectOptions`, so the `browser` fixture of plain `@playwright/test` connects to TestingBot as well (one session per worker, without status reporting).
+- **Credentials stay out of reports and traces.** Playwright copies each project's `use` into its reports, and records the parameters of `connect` in traces. The config therefore holds no credentials: the fixtures of this package add them when they connect, in a way the trace does not record. The `browser` fixture is replaced too, so tests that call `browser.newContext()` share the worker's TestingBot session.
 
 ### Options
 
@@ -170,13 +170,13 @@ const browser = await chromium.connect(getConnectUrl({
 }))
 ```
 
-Use `toPlaywrightBrowserName('edge')` (`chromium`) to pick the browser type, and `runExecutor(page, { action: 'setSessionStatus', arguments: { passed: true } })` to send the result. `startTunnel()` and `stopTunnel()` start and stop a tunnel.
+The URL contains your credentials, so keep it out of `playwright.config` (`use.connectOptions`): Playwright writes that into its reports and traces. Use `toPlaywrightBrowserName('edge')` (`chromium`) to pick the browser type, and `runExecutor(page, { action: 'setSessionStatus', arguments: { passed: true } })` to send the result. `startTunnel()` and `stopTunnel()` start and stop a tunnel.
 
 ## Limitations
 
 - In the default session-per-test mode the `context` fixture is provided by this package. The context options from `use` are applied (viewport, locale, `baseURL`, `storageState`, ...), but Playwright's own `video` option is not: TestingBot records video itself (`tbOptions: { screenrecorder: true }`). Traces and screenshots work as usual.
-- Tests that use the `browser` fixture directly (`browser.newContext()`) use the per-worker session from `connectOptions` and get no status.
-- Tests must import `test` from `@testingbot/playwright` for names and status. With `test` from `@playwright/test` the tests still run on TestingBot, one session per worker, without names or status.
+- Tests that use the `browser` fixture directly (`browser.newContext()`) share one session per worker, which gets no status.
+- Tests must import `test` from `@testingbot/playwright`. With `test` from `@playwright/test`, TestingBot refuses the connection with `Missing key or secret`, since the config holds no credentials.
 
 ## Development
 

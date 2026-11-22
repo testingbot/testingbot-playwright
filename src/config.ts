@@ -140,8 +140,10 @@ export function withTestingBot<T = {}, W = {}>(config: PlaywrightTestConfig<T, W
       use: {
         ...use,
         browserName: toPlaywrightBrowserName(spec.browserName),
-        // Used by the `browser` fixture of plain `@playwright/test` (one session per worker).
-        connectOptions: { wsEndpoint: getConnectUrl({ ...testingbot, name: testingbot.name ?? project.name, env }) },
+        // Without credentials: Playwright writes `use` to its reports (the JSON reporter) and traces.
+        // The fixtures of this package add them when they connect. Tests that import `test` from
+        // plain `@playwright/test` are rejected by TestingBot instead of running a local browser.
+        connectOptions: { wsEndpoint: getConnectUrl({ ...testingbot, name: testingbot.name ?? project.name, env }, false) },
         testingbot
       } as Project['use']
     }
