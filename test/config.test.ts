@@ -24,7 +24,10 @@ describe('withTestingBot', () => {
     expect(use(chrome).testingbot).toEqual({ build: 'b1', browserName: 'chrome', browserVersion: 'latest', platform: 'WIN11', tbOptions: {} })
     expect(use(safari).testingbot.tbOptions).toEqual({ screenrecorder: true })
     const caps = decodeCapabilities(use(chrome).connectOptions.wsEndpoint)
-    expect(caps).toMatchObject({ browserName: 'chrome', platform: 'WIN11', 'tb:options': { key: KEY, secret: SECRET, build: 'b1', name: 'chrome@latest:WIN11' } })
+    expect(caps).toMatchObject({ browserName: 'chrome', platform: 'WIN11', 'tb:options': { build: 'b1', name: 'chrome@latest:WIN11' } })
+    // Playwright copies `use` into reports and traces, so the config holds no credentials.
+    expect(JSON.stringify(config)).not.toContain(SECRET)
+    expect(JSON.stringify(config)).not.toContain(KEY)
   })
 
   it('never puts credentials in the testingbot option or metadata', () => {

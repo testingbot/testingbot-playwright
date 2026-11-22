@@ -28,6 +28,32 @@ jobs:
       - name: Check the package contents
         run: npm pack --dry-run
 
+  compat:
+    # Loads the example's tests with the oldest supported and other Playwright versions. Fixtures
+    # are checked when the tests load, so this catches fixtures a version does not have.
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        playwright: ['1.49.1', '1.56.1', 'latest']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm pack
+      - name: List the example's tests with @playwright/test ${{ matrix.playwright }}
+        working-directory: examples/basic
+        env:
+          TESTINGBOT_KEY: dummy
+          TESTINGBOT_SECRET: dummy
+        run: |
+          npm install --no-save @playwright/test@${{ matrix.playwright }} ../../testingbot-playwright-*.tgz
+          npx playwright test --list
+
   e2e:
     # Runs the example project on TestingBot. Needs the TESTINGBOT_KEY / TESTINGBOT_SECRET secrets,
     # which are not available to pull requests from forks.
@@ -56,9 +82,23 @@ jobs:
       - name: Run the example on TestingBot
         if: env.TESTINGBOT_KEY != '' && env.TESTINGBOT_SECRET != ''
         working-directory: examples/basic
-        env:
-          TESTINGBOT_BUILD: github-${{ github.run_id }}
         run: |
           npm install
           npm install --no-save ../../testingbot-playwright-*.tgz
-          npx playwright test
+          npx playwright test --trace on --reporter=list,json,html
+        env:
+          TESTINGBOT_BUILD: github-${{ github.run_id }}
+          PLAYWRIGHT_JSON_OUTPUT_NAME: results.json
+          PLAYWRIGHT_HTML_OPEN: never
+      - name: Check that no report or trace contains the credentials
+        if: env.TESTINGBOT_KEY != '' && env.TESTINGBOT_SECRET != ''
+        working-directory: examples/basic
+        run: |
+          leaks=0
+          for f in $(find test-results playwright-report results.json testingbot-sessions.json -type f 2>/dev/null); do
+            case "$f" in *.zip) content=$(unzip -p "$f") ;; *) content=$(cat "$f") ;; esac
+            for value in "$TESTINGBOT_KEY" "$TESTINGBOT_SECRET"; do
+              if printf '%s' "$content" | grep -aqF "$value"; then echo "::error::$f contains TestingBot credentials"; leaks=1; fi
+            done
+          done
+          exit $leaks

@@ -1,5 +1,5 @@
 import { test as base, expect } from '@playwright/test'
-import type { Browser, BrowserContext, BrowserContextOptions } from '@playwright/test'
+import type { Browser, BrowserContext, BrowserContextOptions, PlaywrightTestArgs, PlaywrightTestOptions, PlaywrightWorkerArgs, PlaywrightWorkerOptions, TestType } from '@playwright/test'
 import { getConnectUrl, redact, toPlaywrightBrowserName } from './capabilities'
 import { findCredentials } from './credentials'
 import { pageForExecutor, runExecutor, testUrl } from './executor'
@@ -37,7 +37,7 @@ interface WorkerSession {
 
 interface WorkerState {
   remote?: WorkerSession
-  remoteConnecting?: Promise<Browser>
+  remoteConnecting?: Promise<WorkerSession>
   local?: Promise<Browser>
 }
 
@@ -45,14 +45,30 @@ type PlaywrightApi = Pick<typeof import('@playwright/test'), 'chromium' | 'firef
 
 async function connect(playwright: PlaywrightApi, browserName: string, wsEndpoint: string, timeout?: number): Promise<Browser> {
   const type = playwright[toPlaywrightBrowserName(browserName)]
+  const run = () => type.connect(wsEndpoint, timeout ? { timeout } : undefined)
   try {
-    return await type.connect(wsEndpoint, timeout ? { timeout } : undefined)
+    // The connect URL carries the credentials, and Playwright Test records the parameters of every
+    // API call in the trace (and so in the HTML report). Calls inside an internal API zone are not
+    // recorded. `_wrapApiCall` is private: 1.49-1.52 take a boolean, later versions `{ internal }`;
+    // an object is truthy for the former. Without it, connect normally.
+    const wrap = (type as unknown as { _wrapApiCall?: (fn: typeof run, options: unknown) => Promise<Browser> })._wrapApiCall
+    return typeof wrap === 'function' ? await wrap.call(type, run, { internal: true }) : await run()
   } catch (error) {
     const credentials = findCredentials()
     const err = error as Error
     err.message = redact(err.message, [credentials?.secret])
     throw err
   }
+}
+
+/** The shared session of a worker (`sessionPerTest: false`, and the `browser` fixture). */
+function workerSession(playwright: PlaywrightApi, state: WorkerState, testingbot: TestingBotProjectOptions, projectName: string, parallelIndex: number): Promise<WorkerSession> {
+  state.remoteConnecting ??= connect(
+    playwright,
+    testingbot.browserName ?? 'chrome',
+    getConnectUrl({ ...testingbot, name: testingbot.name ?? `${projectName} (worker ${parallelIndex})` })
+  ).then((browser) => (state.remote ??= { browser, results: [] }))
+  return state.remoteConnecting
 }
 
 async function markSession(browser: Browser, name: string | undefined, result: { passed: boolean; reason?: string } | undefined, context?: BrowserContext): Promise<string | undefined> {
@@ -85,7 +101,14 @@ async function markSession(browser: Browser, name: string | undefined, result: {
  * session (named after the test) and its pass/fail status is sent to TestingBot.
  * Projects without the `testingbot` option run locally as usual.
  */
-export const test = base.extend<TestingBotTestFixtures, TestingBotWorkerFixtures>({
+// `_combinedContextOptions` is Playwright Test's own (private) fixture with the context options of
+// `use`, merged with `contextOptions`. It exists, test-scoped, in every supported version.
+const playwrightTest = base as unknown as TestType<
+  PlaywrightTestArgs & PlaywrightTestOptions & { _combinedContextOptions: BrowserContextOptions },
+  PlaywrightWorkerArgs & PlaywrightWorkerOptions
+>
+
+export const test = playwrightTest.extend<TestingBotTestFixtures, TestingBotWorkerFixtures>({
   testingbot: [undefined, { option: true, scope: 'worker' }],
 
   _testingbotWorker: [
@@ -102,6 +125,22 @@ export const test = base.extend<TestingBotTestFixtures, TestingBotWorkerFixtures
       if (state.local) await (await state.local).close().catch(() => undefined)
     },
     { scope: 'worker', auto: true, box: true }
+  ],
+
+  // Playwright's own `browser` fixture would connect with `connectOptions`, which carries no
+  // credentials (see `withTestingBot()`). Tests that use `browser` directly share the worker session.
+  browser: [
+    async ({ testingbot, _testingbotWorker, playwright, browserName, headless, channel, launchOptions, connectOptions }, use, workerInfo) => {
+      if (testingbot) {
+        await use((await workerSession(playwright, _testingbotWorker, testingbot, workerInfo.project.name, workerInfo.parallelIndex)).browser)
+        return
+      }
+      _testingbotWorker.local ??= connectOptions
+        ? playwright[browserName].connect(connectOptions.wsEndpoint, connectOptions)
+        : playwright[browserName].launch({ headless, channel, ...launchOptions })
+      await use(await _testingbotWorker.local)
+    },
+    { scope: 'worker', timeout: 0 }
   ],
 
   testingbotSession: [
@@ -122,67 +161,15 @@ export const test = base.extend<TestingBotTestFixtures, TestingBotWorkerFixtures
       channel,
       launchOptions,
       connectOptions,
-      acceptDownloads,
-      bypassCSP,
-      clientCertificates,
-      colorScheme,
-      deviceScaleFactor,
-      extraHTTPHeaders,
-      forcedColors,
-      geolocation,
-      hasTouch,
-      httpCredentials,
-      ignoreHTTPSErrors,
-      isMobile,
-      javaScriptEnabled,
-      locale,
-      offline,
-      permissions,
-      proxy,
-      reducedMotion,
-      screen,
-      serviceWorkers,
-      storageState,
-      timezoneId,
-      userAgent,
-      viewport,
-      baseURL,
-      contextOptions
+      _combinedContextOptions
     },
     use,
     testInfo
   ) => {
-    const explicit: BrowserContextOptions = {
-      acceptDownloads,
-      bypassCSP,
-      clientCertificates,
-      colorScheme,
-      deviceScaleFactor,
-      extraHTTPHeaders,
-      forcedColors,
-      geolocation,
-      hasTouch,
-      httpCredentials: httpCredentials as BrowserContextOptions['httpCredentials'],
-      ignoreHTTPSErrors,
-      isMobile,
-      javaScriptEnabled,
-      locale,
-      offline,
-      permissions,
-      proxy,
-      reducedMotion,
-      screen,
-      serviceWorkers,
-      storageState,
-      timezoneId,
-      userAgent,
-      viewport,
-      baseURL
-    }
-    const options: BrowserContextOptions = { ...contextOptions }
-    for (const [key, value] of Object.entries(explicit)) {
-      if (value !== undefined) (options as Record<string, unknown>)[key] = value
-    }
+    // Playwright merges `contextOptions` with the context options from `use` (viewport, locale,
+    // baseURL, ...) in this fixture. Asking for the options one by one breaks on Playwright
+    // versions that lack one of them (forcedColors, reducedMotion, contrast, ...).
+    const options: BrowserContextOptions = { ...(_combinedContextOptions ?? {}) }
 
     // Local project: behave like Playwright Test, one browser per worker.
     if (!testingbot) {
@@ -201,14 +188,10 @@ export const test = base.extend<TestingBotTestFixtures, TestingBotWorkerFixtures
 
     // One TestingBot session per worker (sessionPerTest: false).
     if (testingbot.sessionPerTest === false) {
-      if (!_testingbotWorker.remote) {
-        const started = Date.now()
-        _testingbotWorker.remoteConnecting ??= connect(playwright, browserType, getConnectUrl({ ...testingbot, name: testingbot.name ?? `${testInfo.project.name} (worker ${testInfo.parallelIndex})` }))
-        const browser = await _testingbotWorker.remoteConnecting
-        _testingbotWorker.remote ??= { browser, results: [] }
-        testInfo.setTimeout(testInfo.timeout + (Date.now() - started))
-      }
-      const session = _testingbotWorker.remote
+      const started = Date.now()
+      const session = await workerSession(playwright, _testingbotWorker, testingbot, testInfo.project.name, testInfo.parallelIndex)
+      // Waiting for a free TestingBot session should not count against the test timeout.
+      testInfo.setTimeout(testInfo.timeout + (Date.now() - started))
       const context = await session.browser.newContext(options)
       await use(context)
       const result = outcome(testInfo)
